@@ -1,19 +1,28 @@
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 import datetime
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 
-
-# IVÁN revisar si necesita INTALAR PAQUETES, COMANDO: pip install pandas openpyxl
-
+# Función para eliminar caracteres acentuados, añadir para los faltantes para otros idiomas
+def remove_accents(text):
+    replacements = {
+        'á': 'a',
+        'é': 'e',
+        'í': 'i',
+        'ó': 'o',
+        'ú': 'u',
+        'ü': 'u',
+        'ñ': 'n'
+        }
+    for accented_char, normal_char in replacements.items():
+        text = text.replace(accented_char, normal_char)
+    return text
 
 # Configuración de autenticación y conexión con GSC
-CREDENTIALS_FILE = '/Users/ivangarcia/Desktop/pruebascriptgsc-7766cf0aaf44.json'
-SHEET_CREDENTIALS_FILE = '/Users/ivangarcia/Desktop/pruebascriptgsc-a2defdcf30d2.json'
+CREDENTIALS_FILE = '/Users/ivan/Desktop/pruebascriptgsc-7766cf0aaf44.json'
+SHEET_CREDENTIALS_FILE = '/Users/ivan/Desktop/pruebascriptgsc-a2defdcf30d2.json'
 
 # URL de tu propiedad en Google Search Console
 SITE_URL = 'sc-domain:modelosyformularios.es'
@@ -77,11 +86,12 @@ def check_keywords_in_content(content, keywords_data):
     if content is None:
         return {}
     
-    content_lower = content.lower()
-    keyword_planteada = {data['keyword']: {'planteada': False, 'clicks': data['clicks'], 'impressions': data['impressions']} for data in keywords_data}
+    content_normalized = remove_accents(content.lower())
+    keyword_planteada = {remove_accents(data['keyword'].lower()): {'planteada': False, 'clicks': data['clicks'], 'impressions': data['impressions']} for data in keywords_data}
+    
     for data in keywords_data:
-        keyword = data['keyword']
-        if keyword.lower() in content_lower:
+        keyword = remove_accents(data['keyword'].lower())
+        if keyword in content_normalized:
             keyword_planteada[keyword]['planteada'] = True
             
     return keyword_planteada
@@ -90,7 +100,7 @@ def check_keywords_in_content(content, keywords_data):
 def parse_content(url, content):
     soup = BeautifulSoup(content, 'html.parser')
     relevant_text = ""
-    target_div = soup.find('div', class_='c-description-block__container container-fluid u-max-width')
+    target_div = soup.find('div', class_='entry-content clear')
     if target_div:
         relevant_text += target_div.get_text(separator=' ')
     else:
@@ -133,23 +143,26 @@ if __name__ == "__main__":
     # Convertir la lista de diccionarios a un DataFrame
     results_df = pd.DataFrame(export_data)
     
-    # Exportar a CSV
-    output_file = '/Users/ivangarcia/Downloads/results.csv'
-    results_df.to_csv(output_file, index=False)
+    # Exportar a Excel
+    output_file = '/Users/ivan/Desktop/results.xlsx'
+    results_df.to_excel(output_file, index=False)  # Usa to_excel en lugar de to_csv
     print(f"Results have been exported to {output_file}")
+
     
-    # Leer el CSV y realizar los cálculos
-    df = pd.read_csv(output_file)
+    # Leer el archivo Excel y realizar los cálculos
+    df = pd.read_excel(output_file)  # Cambia pd.read_csv a pd.read_excel
 
     # Calculos de métricas
     summary_df = df.groupby('URL').apply(lambda x: pd.Series({
-        'Count_False_KW': (x['Planteada'] == False).sum(),
-        'Count_True_KW': (x['Planteada'] == True).sum(),
-        'Sum_Impressions_False_KW': x.loc[x['Planteada'] == False, 'Impressions'].sum(),
-        'Sum_Clicks_False_KW': x.loc[x['Planteada'] == False, 'Clicks'].sum()
+        'Keywords no presentes': (x['Planteada'] == False).sum(),
+        'Impressions no presentes': x.loc[x['Planteada'] == False, 'Impressions'].sum(),
+        'Clicks no presentes': x.loc[x['Planteada'] == False, 'Clicks'].sum(),
+        'Keywords presentes': (x['Planteada'] == True).sum(),
+        'Impressions presentes': x.loc[x['Planteada'] == True, 'Impressions'].sum(),
+        'Clicks presentes': x.loc[x['Planteada'] == True, 'Clicks'].sum()
     })).reset_index()
 
-    # Guardar el resumen en una NUEVA HOJA 'SUMMARY' del CSV
+    # Guardar el resumen en una NUEVA HOJA 'SUMMARY' dels Excel
     with pd.ExcelWriter(output_file, mode='a', if_sheet_exists='new') as writer:
         summary_df.to_excel(writer, sheet_name='Summary', index=False)
     
