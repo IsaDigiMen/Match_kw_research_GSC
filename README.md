@@ -6,9 +6,7 @@ Se debe runnear para probar el funcionamiento, si no funciona probar el código 
 2. Añadir clics y imporesiones sobre cada ks.
 3. Nueva hoja CSV, suma total de kw false y true por url + clics y impresiones de las kw false.
 4. Normalización: igualar palabras con y sin acentos.
-
-
-TODO:
-     ->  Ampliar para poder analizar más urls: 30 URL máximo.
-     ->  Que cada URL se exporte en hojas distintas.
-     ->  Pestaña summary: rendimiento general de cada url.
+5. Ampliar para poder analizar más urls por input: 30 URL máximo.
+6. Que cada URL se exporte en hojas distintas. Una hoja para cada url.
+7. Pestaña summary: rendimiento general de cada url, tanto clicks y impressiones, presentes y no presentes.
+8. Mensajes output: final y posibles errores.
