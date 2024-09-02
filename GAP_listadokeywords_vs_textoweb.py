@@ -5,7 +5,7 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 
-# Función para eliminar caracteres acentuados
+# Eliminar caracteres acentuados
 def remove_accents(text):
     replacements = {
         'á': 'a',
@@ -25,19 +25,41 @@ CREDENTIALS_FILE = '/Users/ivan/Desktop/pruebascriptgsc-7766cf0aaf44.json'
 SITE_URL = 'sc-domain:modelosyformularios.es'
 
 # Autenticación de la cuenta de GSC
-credentials = service_account.Credentials.from_service_account_file(
-    CREDENTIALS_FILE,
-    scopes=['https://www.googleapis.com/auth/webmasters']
-)
-
-# Construcción del cliente de la API de Google Search Console
+credentials = service_account.Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=["https://www.googleapis.com/auth/webmasters.readonly"])
 service = build('searchconsole', 'v1', credentials=credentials)
 
-# Especificar el rango de fechas para la consulta (últimos 28 días en este ejemplo)
-end_date = datetime.date.today()
-start_date = end_date - datetime.timedelta(days=28)
+# Opciones del rango de fechas
+def select_date_range():
+    options = {
+        '1': 7,
+        '2': 28,
+        '3': 90,   # 3 meses
+        '4': 180,  # 6 meses
+        '5': 365,  # 12 meses
+        '6': 480   # 16 meses
+    }
 
-# Función para consultar datos de GSC
+    print("Selecciona el rango de fechas:")
+    print("1. Últimos 7 días")
+    print("2. Últimos 28 días")
+    print("3. Últimos 3 meses")
+    print("4. Últimos 6 meses")
+    print("5. Últimos 12 meses")
+    print("6. Últimos 16 meses")
+
+    choice = input("Introduce solo el número de la opción deseada (ejemplo: '2'): ")
+
+    if choice not in options:
+        raise ValueError("Opción no válida.")
+
+    end_date = datetime.date.today()
+    start_date = end_date - datetime.timedelta(days=options[choice])
+    
+    return start_date, end_date
+
+start_date, end_date = select_date_range()
+
+# Consultar datos de GSC
 def query_gsc(url):
     request = {
         'startDate': start_date.isoformat(),
@@ -70,11 +92,8 @@ def extract_keywords(response):
 
 # Obtener el contenido de una URL
 def fetch_url_content(url):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36'
-    }
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url)
         response.raise_for_status()
         return response.text
     except requests.RequestException as e:
@@ -85,71 +104,61 @@ def fetch_url_content(url):
 def check_keywords_in_content(content, keywords_data):
     if content is None:
         return {}
-    
+
     content_normalized = remove_accents(content.lower())
     keyword_planteada = {remove_accents(data['keyword'].lower()): {'planteada': False, 'clicks': data['clicks'], 'impressions': data['impressions']} for data in keywords_data}
-    
+
     for data in keywords_data:
         keyword = remove_accents(data['keyword'].lower())
         if keyword in content_normalized:
             keyword_planteada[keyword]['planteada'] = True
-            
+
     return keyword_planteada
 
-# Extraer y analizar el contenido relevante de una página
+# Procesar el contenido de una URL
+def process_url(url, keywords_data):
+    content = fetch_url_content(url)
+    if content:
+        parsed_content = parse_content(url, content)
+        keyword_summary = check_keywords_in_content(parsed_content, keywords_data)
+        return keyword_summary
+    else:
+        return None
+
+# Parsear el contenido de la página
 def parse_content(url, content):
     soup = BeautifulSoup(content, 'html.parser')
     relevant_text = ""
     target_div = soup.find('div', class_='entry-content clear')
     if target_div:
         relevant_text += target_div.get_text(separator=' ')
-    else:
-        print(f"The specified div with the class was not found in the URL: {url}")
-    
-    h1_tag = soup.find('h1')
-    if h1_tag:
-        relevant_text += " " + h1_tag.get_text(separator=' ')
-    else:
-        print(f"The h1 tag was not found in the URL: {url}")
-    
     return relevant_text
-
-# Procesar una URL específica y hacer match de palabras clave con su contenido
-def process_url(url, keywords_data):
-    content = fetch_url_content(url)
-    if content:
-        relevant_text = parse_content(url, content)
-        return check_keywords_in_content(relevant_text, keywords_data)
-    else:
-        return None
 
 # Procesar múltiples URLs con las palabras clave obtenidas de GSC
 if __name__ == "__main__":
-    # Obtener URLs desde el input del usuario
     urls_input = input("Introduce las URLs separadas por comas (máximo 30 URLs): ")
     urls = [url.strip() for url in urls_input.split(',')]
-    
-    # Validación de URLs introducidas
+
     if not urls or len(urls[0]) == 0:
         raise ValueError("Error: Debes introducir al menos una URL.")
-    
+
     if len(urls) > 30:
         raise ValueError("Error: Se permiten un máximo de 30 URLs.")
 
     all_summaries = []
     output_file = '/Users/ivan/Desktop/results.xlsx'
-    
+
     with pd.ExcelWriter(output_file, engine='xlsxwriter') as writer:
         for url in urls:
             try:
                 response = query_gsc(url)
             except Exception as e:
                 print(f"Error al consultar GSC para {url}: {e}")
-                continue  # Saltar a la siguiente URL si hay un error
-            
+                continue
+
             keywords_data = extract_keywords(response)
             result = process_url(url, keywords_data)
-            
+
             if result:
                 export_data = []
                 for keyword, data in result.items():
@@ -160,14 +169,13 @@ if __name__ == "__main__":
                         'Clicks': data['clicks'],
                         'Impressions': data['impressions']
                     })
-                
-                # Convertir la lista de diccionarios a un DataFrame
+
+
                 results_df = pd.DataFrame(export_data)
-                
-                # Crear un nombre de hoja descriptivo basado en la URL
-                sheet_name = f"URL_{urls.index(url) + 1}_{url.split('//')[1].split('/')[0][:20]}"  # Usar parte del dominio
+                results_df = results_df.sort_values(by=['Clicks', 'Impressions'], ascending=[False, False])
+                sheet_name = f"URL_{urls.index(url) + 1}_{url.split('//')[1].split('/')[0][:20]}"  
                 results_df.to_excel(writer, sheet_name=sheet_name, index=False)
-                
+
                 # Calculos de métricas para la hoja Summary
                 summary = results_df.groupby('URL').apply(lambda x: pd.Series({
                     'Keywords no presentes': (x['Planteada'] == False).sum(),
@@ -179,7 +187,7 @@ if __name__ == "__main__":
                 })).reset_index()
 
                 all_summaries.append(summary)
-        
+
         # Crear y guardar la hoja de resumen 'Summary'
         summary_df = pd.concat(all_summaries, ignore_index=True)
         summary_df.to_excel(writer, sheet_name='Summary', index=False)
