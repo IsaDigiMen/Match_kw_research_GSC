@@ -8,3 +8,5 @@
 6. Que cada URL se exporte en hojas distintas. Una hoja para cada url.
 7. Pestaña summary: rendimiento general de cada url, tanto clicks y impressiones, presentes y no presentes.
 8. Mensajes output: final y posibles errores.
+9. Ordenar filas de keywords por vol de clics y luego por vol de imp (pestaña específicas de URL).
+10. Añadir como input la opción de elegir el intervalo de fechas (últimos 7 días, 28 días, 3 meses, 6 meses, 12 meses o 16 meses).
